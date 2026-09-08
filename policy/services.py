@@ -420,6 +420,30 @@ class FilteredPoliciesService(object):
             contribution_plan_name=contribution_plan_name,
         )
 
+    @staticmethod
+    def _filter_active_or_last_expired_only(policies):
+        selected = {}
+        waiting_statuses = {Policy.STATUS_IDLE, Policy.STATUS_READY}
+        single_pick_statuses = {
+            Policy.STATUS_ACTIVE,
+            Policy.STATUS_SUSPENDED,
+            Policy.STATUS_EXPIRED,
+        }
+
+        for policy in policies:
+            # Keep all not-yet-active policies.
+            if policy.status in waiting_statuses:
+                selected["waiting-%s" % policy.uuid] = policy
+                continue
+
+            # Keep only the latest one per product and status type.
+            if policy.status in single_pick_statuses:
+                key = "product-%s-status-%s" % (policy.product.code, policy.status)
+                if key not in selected:
+                    selected[key] = policy
+
+        return selected.values()
+
     def build_query(self, req):
         # TODO: prevent direct dependency on claim_ded structure?
         res = (
@@ -454,16 +478,16 @@ class FilteredPoliciesService(object):
             else:
                 res = res.filter(*core.filter_validity())
         if req.active_or_last_expired_only:
-            # sort on status, so that any active policy (status = 2) pops up...
+            # Keep deterministic ordering before python-side filtering.
             res = (
                 res.annotate(not_null_expiry_date=Coalesce("expiry_date", py_date.max))
                 .annotate(not_null_validity_to=Coalesce("validity_to", py_datetime.max))
                 .order_by(
                     "product__code",
-                    "status",
                     "-not_null_expiry_date",
                     "-not_null_validity_to",
                     "-validity_from",
+                    "status",
                 )
             )
         return res
@@ -477,16 +501,7 @@ class ByInsureeService(FilteredPoliciesService):
         res = self.build_query(by_insuree_request)
         res = res.filter(insuree_policies__insuree__chf_id=by_insuree_request.chf_id)
         if by_insuree_request.active_or_last_expired_only:
-            products = {}
-            for policy in res:
-                if (
-                    policy.status == Policy.STATUS_IDLE
-                    or policy.status == Policy.STATUS_READY
-                ):
-                    products["policy.product.code-%s" % policy.uuid] = policy
-                elif policy.product.code not in products.keys():
-                    products[policy.product.code] = policy
-            res = products.values()
+            res = self._filter_active_or_last_expired_only(res)
         items = [FilteredPoliciesService._to_item(x) for x in res]
         # possible improvement: sort via the ORM
         # ... but beware of the active_or_last_expired_only filtering!
@@ -544,16 +559,7 @@ class ByFamilyService(FilteredPoliciesService):
         res = res.filter(family__uuid=by_family_request.family_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_family_request.active_or_last_expired_only:
-            products = {}
-            for policy in res:
-                if (
-                    policy.status == Policy.STATUS_IDLE
-                    or policy.status == Policy.STATUS_READY
-                ):
-                    products["policy.product.code-%s" % policy.uuid] = policy
-                elif policy.product.code not in products.keys():
-                    products[policy.product.code] = policy
-            res = products.values()
+            res = self._filter_active_or_last_expired_only(res)
         items = tuple(map(lambda x: FilteredPoliciesService._to_item(x), res))
         return ByFamilyResponse(by_family_request=by_family_request, items=items)
 
@@ -605,16 +611,7 @@ class ByPolicyService(FilteredPoliciesService):
         res = res.filter(uuid=by_policy_request.policy_uuid)
         # .distinct('product__code') >> DISTINCT ON fields not supported by MS-SQL
         if by_policy_request.active_or_last_expired_only:
-            products = {}
-            for policy in res:
-                if (
-                    policy.status == Policy.STATUS_IDLE
-                    or policy.status == Policy.STATUS_READY
-                ):
-                    products["policy.product.code-%s" % policy.uuid] = policy
-                elif policy.product.code not in products.keys():
-                    products[policy.product.code] = policy
-            res = products.values()
+            res = self._filter_active_or_last_expired_only(res)
         items = tuple(map(lambda x: FilteredPoliciesService._to_item(x), res))
         return ByPolicyResponse(by_policy_request=by_policy_request, items=items)
 
