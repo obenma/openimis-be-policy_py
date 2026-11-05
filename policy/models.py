@@ -5,9 +5,7 @@ from core import models as core_models
 from core.models import Officer
 from django.core.cache import caches
 from django_redis.cache import RedisCache
-from django.conf import settings
 from django.db import models
-from graphql import ResolveInfo
 from insuree.models import Family
 from product.models import Product
 from contribution_plan.models import ContributionPlan
@@ -19,6 +17,11 @@ cache = caches['coverage']
 
 
 class Policy(core_models.VersionedModel):
+    # A policy is as visible as its family: the product says which benefits
+    # apply, the family says whose data this is. Family scopes itself in code,
+    # so this restricts through Family.get_queryset.
+    row_scope = core_models.ParentScope("family")
+
     id = models.AutoField(db_column="PolicyID", primary_key=True)
     uuid = models.CharField(
         db_column="PolicyUUID", max_length=36, default=uuid.uuid4, unique=True
@@ -111,24 +114,22 @@ class Policy(core_models.VersionedModel):
 
     @classmethod
     def get_queryset(cls, queryset, user):
-        queryset = Policy.filter_queryset(queryset)
-        # GraphQL calls with an info object while Rest calls with the user itself
-        if isinstance(user, ResolveInfo):
-            user = user.context.user
-        if settings.ROW_SECURITY and user.is_anonymous:
-            return queryset.filter(id=-1)
-        # TODO: check the access to the policy information but how ?
-        #   Policy -> Product -> Location ? Policy -> Insurees -> HF -> Location ?
-        # if settings.ROW_SECURITY:
-        #     dist = UserDistrict.get_user_districts(user._u)
-        #     return queryset.filter(
-        #         health_facility__location_id__in=[l.location.id for l in dist]
-        #     )
+        """Current policies the user may see."""
+        return cls.get_scoped_queryset(cls.filter_queryset(queryset), user)
 
-        return queryset
+    @classmethod
+    def get_scoped_queryset(cls, queryset, user):
+        """Row security only, superseded versions included.
+
+        A superseded policy keeps its family, so the same rule applies to it; this
+        is the entry point for queries that show history.
+        """
+        return super().get_queryset(queryset, user)
 
 
 class PolicyRenewal(core_models.VersionedModel):
+    row_scope = core_models.ParentScope("policy")
+
     id = models.AutoField(db_column="RenewalID", primary_key=True)
     uuid = models.CharField(
         db_column="RenewalUUID", max_length=36, default=uuid.uuid4, unique=True

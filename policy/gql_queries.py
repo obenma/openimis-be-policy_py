@@ -11,6 +11,7 @@ from core import (
 from core.schema import OfficerGQLType
 from product.schema import ProductGQLType
 from django.core.exceptions import PermissionDenied
+from core.gql import ScopedQuerysetMixin
 
 
 class PolicyGQLType(DjangoObjectType):
@@ -53,13 +54,16 @@ class PolicyGQLType(DjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
+        # Row security without the validity filter: `policies(showHistory: true)`
+        # returns superseded versions, which the resolver selects itself.
+        queryset = Policy.get_scoped_queryset(queryset, info.context.user)
         # Prevent duplicate Policy records when filtering by chfId through
         # insuree_policies__insuree__chf_id. This type of filter creates a JOIN
         # that can return multiple rows per Policy if multiple InsureePolicies exist.
         return queryset.distinct()
 
 
-class PolicyRenewalGQLType(DjangoObjectType):
+class PolicyRenewalGQLType(ScopedQuerysetMixin, DjangoObjectType):
     class Meta:
         model = PolicyRenewal
         interfaces = (graphene.relay.Node,)
