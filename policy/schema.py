@@ -1,4 +1,3 @@
-from claim.apps import ClaimConfig
 from core.schema import (
     OrderedDjangoFilterConnectionField,
     signal_mutation_module_validate,
@@ -17,6 +16,7 @@ from graphene_django.filter import DjangoFilterConnectionField
 from core.models import Officer
 from .models import PolicyMutation, Policy, PolicyRenewal
 from product.models import Product
+from insuree.apps import InsureeConfig
 from insuree.models import Family, Insuree, InsureePolicy
 from django.db.models import OuterRef, Subquery, F, Count
 from location.apps import LocationConfig
@@ -112,7 +112,10 @@ class Query(graphene.ObjectType):
     policy_renewals = DjangoFilterConnectionField(PolicyRenewalGQLType)
 
     def resolve_policy_renewals(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_mutation_renew_policies_perms):
+        # A read gated by a read-named right; same id as the renew mutation for now,
+        # see PolicyConfig. Non-admins are additionally narrowed to their own officer
+        # just below.
+        if not info.context.user.has_perms(PolicyConfig.gql_query_policy_renewals_perms):
             raise PermissionDenied(_("unauthorized"))
         user = info.context.user
         filters = Q(validity_to__isnull=True)
@@ -263,9 +266,21 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policies_by_insuree(self, info, **kwargs):
+        # A nationwide lookup: `ByInsureeService` filters on the CHFID and on nothing
+        # else, so any identifier resolves to that insuree's policies wherever they
+        # live. That is the enquiry, and the claim panel embeds it through
+        # `policy.InsureePolicyEligibilitySummary`. It used to be authorised by
+        # borrowing the claim read right, so being able to read claims silently
+        # carried being able to read the country's policies, one CHFID at a time.
+        #
+        # The enquiry right is insuree's and is checked as insuree's: it is one right
+        # with one name, and giving policy a second name for the same id would be more
+        # of the aliasing that makes a grant impossible to read off an id.
         if not info.context.user.has_perms(
             PolicyConfig.gql_query_policies_by_insuree_perms
-        ) and not info.context.user.has_perms(ClaimConfig.gql_query_claims_perms):
+        ) and not info.context.user.has_perms(
+            InsureeConfig.gql_query_insuree_inquire_perms
+        ):
             raise PermissionDenied(_("unauthorized"))
         req = ByInsureeRequest(
             chf_id=kwargs.get("chf_id"),
@@ -321,7 +336,17 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policy_eligibility_by_insuree(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+        # Eligibility is keyed on an insuree and answers one question: may this person
+        # be served here, now. That is the same business act as looking them up, and
+        # nobody enters a claim without first enquiring - the converse happens, the
+        # implication does not. So the enquiry right reaches it, alongside 101201.
+        # `EligibilityService.request` carries the same pair, because REST and FHIR
+        # reach eligibility without passing through this resolver.
+        if not info.context.user.has_perms(
+            PolicyConfig.gql_query_eligibilities_perms
+        ) and not info.context.user.has_perms(
+            InsureeConfig.gql_query_insuree_inquire_perms
+        ):
             raise PermissionDenied(_("unauthorized"))
         req = EligibilityRequest(chf_id=kwargs.get("chfId"))
         return Query._resolve_policy_eligibility_by_insuree(
@@ -329,7 +354,11 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policy_item_eligibility_by_insuree(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+        if not info.context.user.has_perms(
+            PolicyConfig.gql_query_eligibilities_perms
+        ) and not info.context.user.has_perms(
+            InsureeConfig.gql_query_insuree_inquire_perms
+        ):
             raise PermissionDenied(_("unauthorized"))
         req = EligibilityRequest(
             chf_id=kwargs.get("chfId"), item_code=kwargs.get("itemCode")
@@ -339,7 +368,11 @@ class Query(graphene.ObjectType):
         )
 
     def resolve_policy_service_eligibility_by_insuree(self, info, **kwargs):
-        if not info.context.user.has_perms(PolicyConfig.gql_query_eligibilities_perms):
+        if not info.context.user.has_perms(
+            PolicyConfig.gql_query_eligibilities_perms
+        ) and not info.context.user.has_perms(
+            InsureeConfig.gql_query_insuree_inquire_perms
+        ):
             raise PermissionDenied(_("unauthorized"))
         req = EligibilityRequest(
             chf_id=kwargs.get("chfId"), service_code=kwargs.get("serviceCode")

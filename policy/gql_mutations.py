@@ -169,7 +169,10 @@ class SuspendPoliciesMutation(OpenIMISMutation):
                 for policy_uuid in data["uuids"]:
                     policy = Policy.objects.filter(uuid=policy_uuid).first()
                     if policy is None:
-                        errors += {
+                        # `errors += <dict>` iterates the dict and appends its
+                        # *keys*, so every failure reached the journal as
+                        # ["title", "list"] and the reason was lost (OP-3195).
+                        errors.append({
                             "title": policy_uuid,
                             "list": [
                                 {
@@ -177,9 +180,11 @@ class SuspendPoliciesMutation(OpenIMISMutation):
                                     % {"id": policy_uuid}
                                 }
                             ],
-                        }
+                        })
                         continue
-                    errors += PolicyService(user).set_suspended(user, policy)
+                    failure = PolicyService(user).set_suspended(user, policy)
+                    if failure:
+                        errors.append(failure)
                 if len(errors) == 1:
                     errors = errors[0]["list"]
                 return errors
@@ -210,7 +215,7 @@ class DeletePoliciesMutation(OpenIMISMutation):
                 for policy_uuid in data["uuids"]:
                     policy = Policy.objects.filter(uuid=policy_uuid).first()
                     if policy is None:
-                        errors += {
+                        errors.append({
                             "title": policy_uuid,
                             "list": [
                                 {
@@ -218,9 +223,11 @@ class DeletePoliciesMutation(OpenIMISMutation):
                                     % {"id": policy_uuid}
                                 }
                             ],
-                        }
+                        })
                         continue
-                    errors += PolicyService(user).set_deleted(policy)
+                    failure = PolicyService(user).set_deleted(policy)
+                    if failure:
+                        errors.append(failure)
                 if len(errors) == 1:
                     errors = errors[0]["list"]
                 return errors

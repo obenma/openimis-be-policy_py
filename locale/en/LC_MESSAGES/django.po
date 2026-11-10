@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2020-11-11 14:21+0100\n"
+"POT-Creation-Date: 2026-09-17 16:48+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,51 +17,57 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: policy/schema.py:105 policy/schema.py:139 policy/schema.py:150
-#: policy/schema.py:162 policy/gql_mutations.py:60 policy/gql_mutations.py:159
-#: policy/gql_mutations.py:203 policy/schema.py:106 policy/schema.py:167
-#: policy/schema.py:179 policy/schema.py:215 policy/schema.py:226
-#: policy/schema.py:238 policy/schema.py:250
+#: policyholder/gql/gql_mutations/create_mutations.py:36
+msgid "mutation.ph_code_duplicated"
+msgstr ""
+
+#: policyholder/schema.py:76 policyholder/schema.py:100
+#: policyholder/schema.py:102 policyholder/schema.py:104
+#: policyholder/validation/permission_validation.py:10
 msgid "unauthorized"
 msgstr "User not authorized for this operation"
 
-#: policy/gql_mutations.py:58 policy/gql_mutations.py:157
-msgid "mutation.authentication_required"
-msgstr "User must be authenticated for this operation"
+#~ msgid "mutation.authentication_required"
+#~ msgstr "User must be authenticated for this operation"
 
-#: policy/gql_mutations.py:86
-msgid "policy.mutation.failed_to_create_policy"
-msgstr "Failed to create policy"
+#~ msgid "policy.mutation.failed_to_create_policy"
+#~ msgstr "Failed to create policy"
 
-#: policy/gql_mutations.py:103 policy/validations.py:12
-#: policy/validations.py:23
-msgid "policy.mutation.failed_to_update_policy"
-msgstr "Failed to update policy"
+#~ msgid "policy.mutation.failed_to_update_policy"
+#~ msgstr "Failed to update policy"
 
-#: policy/gql_mutations.py:125
-msgid "policy.mutation.failed_to_renew_policy"
-msgstr "Failed to renew policy"
+#~ msgid "policy.mutation.failed_to_renew_policy"
+#~ msgstr "Failed to renew policy"
 
-#: policy/gql_mutations.py:140 policy/gql_mutations.py:176
-msgid "policy.mutation.failed_to_suspend_policy"
-msgstr "Failed to suspend policy"
+#~ msgid "policy.mutation.id_does_not_exist"
+#~ msgstr "Policy %(id)s doesn't exist"
 
-#: policy/gql_mutations.py:167
-msgid "policy.mutation.id_does_not_exist"
-msgstr "Policy %(id)s doesn't exist"
+#~ msgid "policy.mutation.failed_to_suspend_policy"
+#~ msgstr "Failed to suspend policy"
 
-#: policy/gql_mutations.py:188
-msgid "policy.mutation.failed_to_change_status_of_policy"
-msgstr "Failed to change status of policy %(policy)s"
+#~ msgid "policy.validation.id_does_not_exist"
+#~ msgstr "Policy %(id)s doesn't exist"
 
-#: policy/gql_mutations.py:213 policy/validations.py:13
-msgid "policy.validation.id_does_not_exist"
-msgstr "Policy %(id)s doesn't exist"
+#, fuzzy
+#~| msgid "policy.mutation.failed_to_create_policy"
+#~ msgid "policy.mutation.failed_to_delete_policies"
+#~ msgstr "Failed to create policy"
 
-#: policy/validations.py:24
-msgid "policy.mutation.policy_not_idle"
-msgstr "On idle policies can be updated"
+#, fuzzy
+#~| msgid "policy.mutation.failed_to_create_policy"
+#~ msgid "policy_renewal.mutation.failed_to_delete_policy_renewal"
+#~ msgstr "Failed to create policy"
 
-#: policy/values.py:178
-msgid "policy.validation.members_count_above_max"
-msgstr "Number of insurees %(count)s is above policy maximum: %(max)s"
+#, fuzzy
+#~| msgid "policy.mutation.policy_not_idle"
+#~ msgid "policy.mutation.policy_is_used_in_claims"
+#~ msgstr "On idle policies can be updated"
+
+#~ msgid "policy.mutation.failed_to_change_status_of_policy"
+#~ msgstr "Failed to change status of policy %(policy)s"
+
+#~ msgid "policy.mutation.policy_not_idle"
+#~ msgstr "On idle policies can be updated"
+
+#~ msgid "policy.validation.members_count_above_max"
+#~ msgstr "Number of insurees %(count)s is above policy maximum: %(max)s"

@@ -355,7 +355,7 @@ class PolicyGraphQLTestCase(openIMISGraphQLTestCase):
       createPolicy(
         input: {{
           clientMutationId: "{muuid}"
-          clientMutationLabel: "Création de la police ttttt eeeee (123123123) - 2024-06-01 : 2025-05-31"
+          clientMutationLabel: "Create policy ttttt eeeee (123123123) - 2024-06-01 : 2025-05-31"
 
           enrollDate: "2024-04-07"
             startDate: "2024-06-01"
