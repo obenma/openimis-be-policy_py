@@ -1455,6 +1455,27 @@ def update_insuree_policies(policy, user, members=None):
             )
 
 
+def update_insuree_policies_dates(policy, activation_date=None):
+    """
+    The InsureePolicy dates of the current members of `policy` when a payment changes it
+    (contribution module); the dates of the members belong to the policy:
+    - without `activation_date`: the policy dates changed (activation, renewal), every
+      member gets them;
+    - with `activation_date`: the policy was already effective, its members are
+      re-activated from that date (only the effective date changes).
+    The single place to give each member their own validity within the policy period
+    (OP-3321).
+    """
+    rows = policy.insuree_policies.filter(validity_to__isnull=True)
+    if activation_date is not None:
+        return rows.update(effective_date=activation_date)
+    return rows.update(
+        effective_date=policy.effective_date,
+        start_date=policy.start_date,
+        expiry_date=policy.expiry_date,
+    )
+
+
 def policy_status_premium_paid(policy, effective_date):
     if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_CONTRIBUTION:
         policy.effective_date = effective_date
