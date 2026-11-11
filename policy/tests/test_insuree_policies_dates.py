@@ -57,6 +57,23 @@ class InsureePoliciesValidityTest(TestCase):
             validity = get_validity(self.policy, self.insuree.family, None, [self.insuree, self.other])
         self.assertEqual([self.insuree], [member for member, _ in validity])
 
+    def test_rule_single_validity_applied_to_every_member(self):
+        """the former structure (one validity, as for a contract) is applied to each member"""
+        single = {"enroll_date": START, "start_date": datetime.date(2024, 2, 1),
+                  "effective_date": datetime.date(2024, 2, 1), "expiry_date": datetime.date(2024, 10, 31)}
+        with _rule_answers(single):
+            validity = get_validity(self.policy, self.insuree.family, None, [self.insuree, self.other])
+        self.assertEqual([self.insuree, self.other], [member for member, _ in validity])
+        self.assertEqual({datetime.date(2024, 10, 31)}, {dates["expiry_date"] for _, dates in validity})
+
+    def test_policy_is_the_calling_context_without_contribution_plan(self):
+        with mock.patch("policy.utils.run_calculation_rules", return_value=None) as rules:
+            get_validity(self.policy, self.insuree.family, None, [self.insuree])
+        kwargs = rules.call_args.kwargs
+        self.assertEqual(("validity", self.policy, self.policy),
+                         (kwargs["context"], kwargs["instance"], kwargs["policy"]))
+        self.assertNotIn("sender", kwargs, "run_calculation_rules sets it: passing it again raises")
+
     # --- member_dates: within the policy, never effective before the start
     def test_member_dates_within_the_policy(self):
         dates = member_dates(self.policy, {"start_date": datetime.date(2023, 6, 1),

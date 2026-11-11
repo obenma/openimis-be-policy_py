@@ -58,7 +58,6 @@ def get_members(policy, family, user, members=None):
         )
         if instance:
             members = run_calculation_rules(
-                sender=instance.__class__.__name__,
                 instance=instance,
                 user=user,
                 context="members",
@@ -80,33 +79,45 @@ def _contribution_plan(policy):
     return getattr(policy, "contribution_plan", None)
 
 
+# the validity a calculation rule gives a contract (calcrule_contribution_legacy,
+# context "validity"): one set of dates for every member
+SINGLE_VALIDITY_KEYS = {"enroll_date", "start_date", "effective_date", "expiry_date"}
+
+
+def _is_single_validity(validity):
+    return bool(validity) and set(validity) <= SINGLE_VALIDITY_KEYS
+
+
 def get_validity(policy, family, user, members=None):
     """
     The members `policy` covers, each with their own validity (OP-3321):
     [(member, {"start_date", "effective_date", "expiry_date"} or None)].
 
-    The calculation rule of the policy is asked (context "validity", with `policy`,
-    `family` and the `members` of get_members): it answers a mapping member (or member
-    id) -> dates; a member it gives no dates to is not covered any more. Without an
-    answer (no rule, or a rule not handling that context) every member of get_members is
-    covered with the policy dates (None). Missing keys in the dates of a member mean the
-    policy ones; `member_dates` resolves them within the policy period.
+    The calculation rules are asked (context "validity"; instance: the policy's
+    contribution plan, or the policy itself as calling context; kwargs: `policy`,
+    `family` and the `members` of get_members). A rule may answer:
+    - a map member (or member id) -> dates: a member it gives no dates to is not
+      covered any more;
+    - a single validity (the former structure, {enroll_date, start_date,
+      effective_date, expiry_date}): applied to every member of get_members.
+    Without an answer (no rule handles it) every member of get_members is covered with
+    the policy dates (None). Missing keys mean the policy dates; `member_dates` keeps
+    them within the policy period.
     """
     members = list(get_members(policy, family, user, members) or [])
-    validity = None
-    instance = _contribution_plan(policy)
-    if instance:
-        validity = run_calculation_rules(
-            sender=instance.__class__.__name__,
-            instance=instance,
-            user=user,
-            context="validity",
-            policy=policy,
-            family=family,
-            members=members,
-        )
-    if not isinstance(validity, dict):
+    instance = _contribution_plan(policy) or policy
+    validity = run_calculation_rules(
+        instance=instance,
+        user=user,
+        context="validity",
+        policy=policy,
+        family=family,
+        members=members,
+    )
+    if not isinstance(validity, dict) or not validity:
         return [(member, None) for member in members]
+    if _is_single_validity(validity):
+        return [(member, dict(validity)) for member in members]
     by_id = {getattr(key, "id", key): dates for key, dates in validity.items()}
     return [(member, by_id[member.id]) for member in members if by_id.get(member.id)]
 

@@ -252,7 +252,6 @@ def set_value(policy, members, prev_policy, user):
     )
     policy_value = (
         run_calculation_rules(
-            sender=instance.__class__.__name__,
             instance=instance,
             user=user,
             context="policy_value",
