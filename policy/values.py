@@ -6,7 +6,13 @@ from calculation.services import run_calculation_rules
 from core.apps import CoreConfig
 from dateutil.relativedelta import relativedelta
 from contribution_plan.models import ContributionPlan
-from policy.utils import get_members
+from policy.utils import get_validity, earliest_member_start
+
+
+def _as_plain_date(value):
+    if value is None:
+        return None
+    return value.date() if isinstance(value, py_datetime.datetime) else value
 
 
 def cycle_start(product, cycle, ref_date):
@@ -26,11 +32,18 @@ def cycle_start(product, cycle, ref_date):
         return start
 
 
-def set_start_date(policy):
+def set_start_date(policy, earliest_start=None):
+    """
+    `earliest_start`: the earliest start date of the covered members (their validity,
+    OP-3321): when later than the enrolment, the policy starts from it (cycles apply
+    after).
+    """
     from core import datetime, datetimedelta
 
     product = policy.product
     ref_enroll_date = policy.enroll_date
+    if earliest_start is not None and earliest_start > _as_plain_date(ref_enroll_date):
+        ref_enroll_date = earliest_start
     if policy.stage == Policy.STAGE_NEW and product.administration_period:
         ref_enroll_date = (
             datetime.date.from_ad_date(ref_enroll_date)
@@ -264,7 +277,12 @@ def set_legacy_policy_value(product, policy, prev_policy, f_counts):
 
 
 def policy_values(policy, family, prev_policy, user, members=None):
-    members = get_members(policy, family, user, members)
+    """
+    The members covered (with their validity, policy.utils.get_validity) are counted;
+    the policy starts no earlier than the first of them.
+    """
+    validity = get_validity(policy, family, user, members)
+    members = [member for member, _ in validity]
     max_members = policy.product.max_members
     above_max = max(0, len(members or []) - max_members)
     warnings = []
@@ -273,7 +291,7 @@ def policy_values(policy, family, prev_policy, user, members=None):
             _("policy.validation.members_count_above_max")
             % {"max": max_members, "count": len(members)}
         )
-    set_start_date(policy)
+    set_start_date(policy, earliest_start=earliest_member_start(validity))
     set_expiry_date(policy)
     set_value(policy, members, prev_policy, user)
     return policy, warnings

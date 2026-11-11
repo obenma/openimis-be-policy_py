@@ -23,7 +23,7 @@ from insuree.models import Insuree, InsureePolicy
 from insuree.services import create_insuree_renewal_detail
 from medical.models import Service, Item
 from policy.apps import PolicyConfig
-from policy.utils import MonthsAdd, get_members
+from policy.utils import MonthsAdd, get_members, get_validity, member_dates, _as_date
 
 from .models import Policy, PolicyRenewal
 
@@ -1422,8 +1422,19 @@ HOF{% endif %}
 
 
 def update_insuree_policies(policy, user, members=None):
-    members = get_members(policy, policy.family, user, members)
-    for member in members:
+    """
+    One InsureePolicy per covered member, with their own dates within the policy
+    (policy.utils.get_validity / member_dates, OP-3321); a current row of a member the
+    calculation rule no longer covers is closed.
+    """
+    validity = get_validity(policy, policy.family, user, members)
+    covered = {member.id for member, _ in validity}
+    for stale in InsureePolicy.objects.filter(*InsureePolicy.filter_validity(), policy=policy) \
+            .exclude(insuree_id__in=covered):
+        if members is None or stale.insuree_id in {getattr(m, "id", m) for m in members}:
+            logger.debug("InsureePolicy(%s) closed: member no longer covered", stale.id)
+            stale.delete_history()
+    for member, dates in validity:
         existing_ip = InsureePolicy.objects.filter(
             *InsureePolicy.filter_validity(), insuree=member, policy=policy
         ).first()
@@ -1436,9 +1447,7 @@ def update_insuree_policies(policy, user, members=None):
             policy=policy,
             defaults=dict(
                 enrollment_date=policy.enroll_date,
-                start_date=policy.start_date,
-                effective_date=policy.effective_date,
-                expiry_date=policy.expiry_date,
+                **member_dates(policy, dates),
                 offline=policy.offline,
                 audit_user_id=(
                     getattr(user, "id_for_audit", getattr(user, "id", user if isinstance(user, int) else -1))
@@ -1455,28 +1464,38 @@ def update_insuree_policies(policy, user, members=None):
             )
 
 
-def update_insuree_policies_dates(policy, activation_date=None):
+def update_insuree_policies_dates(policy, activation_date=None, user=None):
     """
     The InsureePolicy dates of the current members of `policy` when a payment changes it
     (contribution module); the dates of the members belong to the policy:
-    - without `activation_date`: the policy dates changed (activation, renewal), every
-      member gets them;
+    - without `activation_date`: the policy dates changed (activation, renewal);
     - with `activation_date`: the policy was already effective, its members are
-      re-activated from that date (only the effective date changes).
-    The single place to give each member their own validity within the policy period
-    (OP-3321).
+      re-activated from that date.
+    Each member keeps their own validity within the policy (get_validity, OP-3321) and is
+    never effective before their start date.
     """
-    rows = policy.insuree_policies.filter(validity_to__isnull=True)
-    if activation_date is not None:
-        return rows.update(effective_date=activation_date)
-    return rows.update(
-        effective_date=policy.effective_date,
-        start_date=policy.start_date,
-        expiry_date=policy.expiry_date,
+    rows = list(policy.insuree_policies.filter(validity_to__isnull=True).select_related("insuree"))
+    validity = dict(
+        (member.id, dates)
+        for member, dates in get_validity(policy, policy.family, user, [row.insuree for row in rows])
     )
+    for row in rows:
+        if row.insuree_id not in validity:
+            continue  # no longer covered: left to update_insuree_policies
+        dates = member_dates(policy, validity[row.insuree_id], activation_date=activation_date)
+        if activation_date is not None:
+            dates = {"effective_date": dates["effective_date"]}
+        changed = {field: value for field, value in dates.items() if getattr(row, field) != value}
+        if changed:
+            InsureePolicy.objects.filter(id=row.id).update(**changed)
 
 
 def policy_status_premium_paid(policy, effective_date):
+    """A policy paid is effective from the payment, never before its start date: a
+    policy dated in the future is not active on the payment already."""
+    if effective_date is not None and policy.start_date is not None \
+            and _as_date(effective_date) < _as_date(policy.start_date):
+        effective_date = policy.start_date
     if PolicyConfig.activation_option == PolicyConfig.ACTIVATION_OPTION_CONTRIBUTION:
         policy.effective_date = effective_date
         policy.status = Policy.STATUS_ACTIVE
