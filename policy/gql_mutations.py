@@ -167,7 +167,11 @@ class SuspendPoliciesMutation(OpenIMISMutation):
                     raise PermissionDenied(_("unauthorized"))
                 errors = []
                 for policy_uuid in data["uuids"]:
-                    policy = Policy.objects.filter(uuid=policy_uuid).first()
+                    # Only a policy the caller may see can be acted on: an
+                    # out-of-scope uuid reads as "does not exist".
+                    policy = Policy.get_queryset(
+                        Policy.objects.filter(uuid=policy_uuid), user
+                    ).first()
                     if policy is None:
                         # `errors += <dict>` iterates the dict and appends its
                         # *keys*, so every failure reached the journal as
@@ -213,7 +217,11 @@ class DeletePoliciesMutation(OpenIMISMutation):
                     raise PermissionDenied(_("unauthorized"))
                 errors = []
                 for policy_uuid in data["uuids"]:
-                    policy = Policy.objects.filter(uuid=policy_uuid).first()
+                    # Only a policy the caller may see can be acted on: an
+                    # out-of-scope uuid reads as "does not exist".
+                    policy = Policy.get_queryset(
+                        Policy.objects.filter(uuid=policy_uuid), user
+                    ).first()
                     if policy is None:
                         errors.append({
                             "title": policy_uuid,

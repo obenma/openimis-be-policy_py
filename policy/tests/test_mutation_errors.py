@@ -49,11 +49,11 @@ class PolicyMutationErrorShapeTest(TestCase):
             "list": [{"message": "policy.mutation.policy_is_used_in_claims"}],
         }
         with patch(
-            "policy.gql_mutations.Policy.objects.filter"
-        ) as objects_filter, patch(
+            "policy.gql_mutations.Policy.get_queryset"
+        ) as scoped_queryset, patch(
             "policy.gql_mutations.PolicyService.set_deleted", return_value=refusal
         ):
-            objects_filter.return_value.first.return_value = object()
+            scoped_queryset.return_value.first.return_value = object()
             errors = DeletePoliciesMutation.async_mutate(
                 self.user, uuids=["a-policy-uuid", "another"]
             )
