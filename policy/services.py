@@ -4,7 +4,7 @@ from datetime import datetime as py_datetime, date as py_date
 from django.core.cache import caches
 
 import core
-from claim.models import Claim, ClaimItem
+from claim.models import Claim, ClaimDedRem, ClaimItem, ClaimService
 from django import dispatch
 from django.core.exceptions import (
     PermissionDenied,
@@ -189,9 +189,33 @@ class PolicyService:
                 ],
             }
 
+    # Claims that have left the health facility's hands: once submitted, a claim
+    # is checked against the policy and later paid from it. Entered (draft) and
+    # rejected claims do not hold the policy.
+    BLOCKING_CLAIM_STATUSES = (
+        Claim.STATUS_CHECKED,
+        Claim.STATUS_PROCESSED,
+        Claim.STATUS_VALUATED,
+    )
+
+    @classmethod
+    def is_used_in_claims(cls, policy):
+        # Deliberately unscoped: a claim from a district the caller cannot see
+        # still holds the policy. Only existence is read, nothing is returned.
+        claim_filter = {
+            "policy": policy,
+            "validity_to__isnull": True,
+            "claim__validity_to__isnull": True,
+            "claim__status__in": cls.BLOCKING_CLAIM_STATUSES,
+        }
+        return any(
+            model.objects.filter(**claim_filter).exists()
+            for model in (ClaimItem, ClaimService, ClaimDedRem)
+        )
+
     def set_deleted(self, policy):
 
-        if policy.claim_ded_rems:
+        if self.is_used_in_claims(policy):
             return {
                 "title": policy.uuid,
                 "list": [
